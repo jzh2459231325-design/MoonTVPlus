@@ -1,0 +1,52 @@
+name: Sync with upstream
+
+# Merge upstream mtvpls/MoonTVPlus into this repo main once a day.
+# Plain git merge only: never resets, force-pushes or deletes local commits.
+# If upstream conflicts with local edits, this run fails visibly and changes nothing.
+
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/mtvpls/MoonTVPlus.git
+          git fetch upstream main --depth=50
+
+      - name: Merge upstream if ahead
+        run: |
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "already up to date"
+            echo "UPDATED=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          git merge --no-edit upstream/main
+          echo "UPDATED=true" >> "$GITHUB_ENV"
+
+      - name: Push if updated
+        if: env.UPDATED == 'true'
+        run: git push origin HEAD:main
